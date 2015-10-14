@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
+	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/headzoo/surf"
@@ -15,13 +17,14 @@ import (
 
 type Products struct {
 	Results []Product `json:"results"`
+	Total   float64   `json:"total"`
 }
 
 type Product struct {
-	Title       string `json:"title"`
-	Size        string `json:"size"`
-	UnitPrice   string `json:"unit_price"`
-	Description string `json:"description"`
+	Title       string  `json:"title"`
+	Size        string  `json:"size"`
+	UnitPrice   float64 `json:"unit_price"`
+	Description string  `json:"description"`
 }
 
 func main() {
@@ -33,6 +36,7 @@ func main() {
 	}
 
 	var prods []Product
+
 	chProducts := make(chan Product)
 	count := 0
 
@@ -49,8 +53,11 @@ func main() {
 
 	// Wait for responses on the channel
 	c := 0
+	total := 0.0
 	for c < count {
 		p := <-chProducts
+		// Add to the total
+		total += p.UnitPrice
 		prods = append(prods, p)
 		c++
 	}
@@ -58,7 +65,7 @@ func main() {
 	// We are done so close the channel
 	close(chProducts)
 
-	products := Products{Results: prods}
+	products := Products{Results: prods, Total: total}
 
 	ToJson(products, os.Stdout)
 }
@@ -85,7 +92,15 @@ func ProcessPage(link string, chProducts chan Product) {
 
 	title := newpage.Find(".productTitleDescriptionContainer h1").Text()
 
-	unitPrice := newpage.Find(".pricePerUnit").Text()
+	r := regexp.MustCompile(`£(?P<a>[0-9]{1,3}.[0-9]{1,2})`)
+
+	unitPrice := r.FindStringSubmatch(newpage.Find(".pricePerUnit").Text())
+
+	if len(unitPrice) < 1 {
+		log.Fatal("Couldn't parse price for " + title)
+	}
+
+	unitPriceFloat, _ := strconv.ParseFloat(unitPrice[1], 2)
 
 	// Retrive the size adn description by looping through a section of the page
 	newpage.Find(".productDataItemHeader").Each(func(i int, s *goquery.Selection) {
@@ -101,7 +116,7 @@ func ProcessPage(link string, chProducts chan Product) {
 	p := Product{
 		Title:       title,
 		Size:        size,
-		UnitPrice:   unitPrice,
+		UnitPrice:   unitPriceFloat,
 		Description: description,
 	}
 

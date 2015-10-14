@@ -11,7 +11,7 @@ func TestToJson(t *testing.T) {
 	product := Product{
 		Title:       "This is a test",
 		Size:        "10 size",
-		UnitPrice:   "10.00",
+		UnitPrice:   1.00,
 		Description: "this is a test description",
 	}
 
